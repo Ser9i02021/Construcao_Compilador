@@ -63,7 +63,11 @@ def analisador_sintatico(tokens):
             break
 
         if len(pilha) == 0:
-            raise Exception("Erro na análise sintática! Tente novamente!")
+            tok = tokens[token_atual]
+            raise Exception(
+                f"Erro sintático na linha {tok.l}, coluna {tok.c}: "
+                f"esperado '{pilha[-1]}', encontrado '{tok.tipo}'."
+            )
 
 
         if pilha[-1] in terminais:
@@ -71,7 +75,11 @@ def analisador_sintatico(tokens):
                 pilha.pop()
                 token_atual += 1
             else:
-                raise Exception("Erro na análise sintática! Tente novamente!")
+                tok = tokens[token_atual]
+                raise Exception(
+                    f"Erro sintático na linha {tok.l}, coluna {tok.c}: "
+                    f"esperado '{pilha[-1]}', encontrado '{tok.tipo}'."
+                )
 
         else:
             producao = tabela_ll1.get(pilha[-1], {}).get(tokens[token_atual].tipo)
@@ -81,7 +89,11 @@ def analisador_sintatico(tokens):
                     if especifico != "&":
                      pilha.append(especifico)
             else:
-                raise Exception("Erro na análise sintática! Tente novamente!")
+                tok = tokens[token_atual]
+                raise Exception(
+                    f"Erro sintático na linha {tok.l}, coluna {tok.c}: "
+                    f"token inesperado '{tok.tipo}'."
+                )
 
     return
 
