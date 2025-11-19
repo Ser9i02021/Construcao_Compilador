@@ -16,15 +16,16 @@ class Token:
             return f"{self.tipo}"
 
 
-def adicionarsimbolo(valor):
+def adicionarsimbolo(valor, linha, coluna):
     global tabela_simbolos
 
     for simbolos in tabela_simbolos:
-        if simbolos == valor:
+        if simbolos[0] == valor:
+            simbolos.append((linha, coluna))
             return tabela_simbolos.index(simbolos)
 
-    tabela_simbolos.append(valor)
-    return tabela_simbolos.index(valor)
+    tabela_simbolos.append([valor, (linha, coluna)])
+    return tabela_simbolos.index([valor, (linha, coluna)])
 
 
 def determinar_token(lexema,posicao,c):
@@ -286,7 +287,7 @@ def determinar_token(lexema,posicao,c):
             # TOKEN: LETRA
             case 26:
                 if len(lexema) == atual:
-                    return Token("ident", adicionarsimbolo(lexema), posicao,c)
+                    return Token("ident", adicionarsimbolo(lexema, posicao, c), posicao,c)
                 elif lexema[atual].isalpha() or lexema[atual] == '_' or lexema[atual].isdigit():
                     afd = 27
                     atual += 1
@@ -298,7 +299,7 @@ def determinar_token(lexema,posicao,c):
                 if len(lexema) == atual:
                     if lexema in palavras_reservadas:
                         return Token(lexema, None, posicao,c)
-                    return Token("ident", adicionarsimbolo(lexema), posicao,c)
+                    return Token("ident", adicionarsimbolo(lexema, posicao, c), posicao,c)
                 elif lexema[atual].isalpha() or lexema[atual] == '_' or lexema[atual].isdigit():
                     atual += 1
                 else:
@@ -325,8 +326,27 @@ def analisar(codigo):
     coluna = 1
     posicao = 0 # Controla a posicao sendo verificada
     simbolo = "+-*/%=(){},!<>[];" # operadores que irão concluir um lexema
+    '''
+    # inicializa a tabela de simbolos com as palavras reservadas (IDENTs)
+    tabela_simbolos = {
+        'def': [],
+        'int': [],
+        'float': [],
+        'string': [],
+        'break': [],
+        'print': [],
+        'read': [],
+        'return': [],
+        'if': [],
+        'else': [],
+        'for': [],
+        'new': [],
+        'null': []
+    } 
+    '''
     tabela_simbolos = []
     lexema = ""
+    coluna_inicio_lexema = None
 
     while posicao < len(codigo):
         char = codigo[posicao]
@@ -336,41 +356,49 @@ def analisar(codigo):
             linha += 1
             coluna = 1
             posicao += 1
+            lexema = ""
+            coluna_inicio_lexema = None
             continue
 
         # caso seja um espaço (conclui o lexema)
         elif char.isspace():
             if lexema:
-                tokens.append(determinar_token(lexema,linha,coluna))
+                tokens.append(determinar_token(lexema,linha,coluna_inicio_lexema))
+                #tabela_simbolos[lexema].append((linha,coluna))
                 lexema = ""
+                coluna_inicio_lexema = None
             posicao += 1
             coluna += 1
 
         # caso seja um simbolo (conclui o lexema, além de processar o simbolo)
         elif char in simbolo:
             if lexema:
-                tokens.append(determinar_token(lexema,linha,coluna))
+                tokens.append(determinar_token(lexema,linha,coluna_inicio_lexema))
+                #tabela_simbolos[lexema].append((linha,coluna))
                 lexema = ""
-            if char == '<' or char == '>' or char == '=' or char == '!':
-                char_1 = codigo[posicao + 1]
-                if char_1 == '<' or char_1 == '>' or char_1 == '=' or char_1 == '!':
+                coluna_inicio_lexema = None
+            if char in "<>!=":
+                if posicao + 1 < len(codigo) and codigo[posicao + 1] in "<>!=":
                     token_1 = codigo[posicao] + codigo[posicao + 1]
-                    tokens.append(determinar_token(token_1, linha,coluna))
+                    tokens.append(determinar_token(token_1, linha, coluna_inicio_lexema))
                     posicao += 2
                     coluna += 2
                 else:
-                    tokens.append(determinar_token(char, linha,coluna))
+                    tokens.append(determinar_token(char, linha, coluna_inicio_lexema))
                     posicao += 1
                     coluna += 1
+
             else:
-                tokens.append(determinar_token(char, linha,coluna))
+                tokens.append(determinar_token(char, linha, coluna_inicio_lexema))
                 posicao += 1
+                coluna += 1
 
         # caso seja um " (indicando inicio de String), deve gerar o token inteiro dentro de um loop
         elif char == '"':
             if lexema:
-                tokens.append(determinar_token(lexema, linha,coluna))
+                tokens.append(determinar_token(lexema, linha, coluna_inicio_lexema))
             lexema = ""
+            coluna_inicio_lexema = None
             while True:
                 lexema += codigo[posicao]
                 posicao += 1
@@ -381,12 +409,14 @@ def analisar(codigo):
                     coluna += 1
                     break
 
-            tokens.append(determinar_token(lexema, linha,coluna))
+            tokens.append(determinar_token(lexema, linha, coluna_inicio_lexema))
             lexema = ""
-
+            coluna_inicio_lexema = None
         else:
+            if lexema == "":
+                coluna_inicio_lexema = coluna
             lexema += codigo[posicao]
             posicao += 1
             coluna += 1
 
-    return tokens
+    return tokens, tabela_simbolos
