@@ -1,5 +1,6 @@
 from lexico import *
 from sintatico import *
+from semantico import *
 
 def entrada():
     codigo = """
@@ -23,7 +24,7 @@ def token_para_string(lista):
     linha_atual = 1
 
     for token in lista:
-        if token.l is not linha_atual:
+        if token.l != linha_atual:
             resultado += '\n'
             linha_atual = token.l
         resultado += token.__repr__() + " "
@@ -32,11 +33,16 @@ def token_para_string(lista):
 
 def main():
     codigo = entrada()
-    tokens = analisar(codigo)
+    tokens, tabela_simbolos = analisar(codigo)
+    print("Tabela de Símbolos:")
+    print(tabela_simbolos)
     print(token_para_string(tokens))
-    print("O código é reconhecido pela gramática!")
 
     analisador_sintatico(tokens)
+
+    analisador_semantico(tokens, tabela_simbolos)
+
+    print("O código é reconhecido pela gramática!")
 
 main()
 
