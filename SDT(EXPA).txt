@@ -1,0 +1,465 @@
+PROGRAM   -> STATEMENT
+          | FUNCLIST
+          | &
+
+FUNCLIST  -> FUNCDEF FUNCLIST'
+
+FUNCLIST' -> FUNCDEF FUNCLIST'
+          | &
+
+FUNCDEF   -> def ident ( PARAMLIST ) { STATELIST }
+
+PARAMLIST   -> PARAMETRO PARAMLIST'
+             | &
+
+PARAMETRO   -> int ident
+             | float ident
+             | string ident
+
+PARAMLIST'  -> , PARAMETRO PARAMLIST'
+             | &
+
+STATEMENT   -> VARDECL ;
+             | ATRIBSTAT ;
+             | PRINTSTAT ;
+             | READSTAT ;
+             | RETURNSTAT ;
+             | IFSTAT ;
+             | FORSTAT ;
+             | { STATELIST }
+             | break ;
+             | ;
+
+VARDECL     -> int    ident {36} CONSTANTE {37} {40}
+             | float  ident {36} CONSTANTE {37} {41}
+             | string ident {36} CONSTANTE {37} {42}
+
+CONSTANTE   -> [ const_inteiro ] CONSTANTE {38}
+             | & {39}
+
+ATRIBSTAT   -> LVALUE = ATRIBSTAT'
+
+ATRIBSTAT'  -> EXPRESSION
+             | ALLOCEXPRESSION
+
+FUNCCALL    -> ( PARAMLISTCALL )
+
+PARAMLISTCALL  -> ident PARAMLISTCALL'
+                | &
+
+PARAMLISTCALL' -> , ident PARAMLISTCALL'
+                | &
+
+PRINTSTAT   -> print EXPRESSION
+
+READSTAT    -> read LVALUE
+
+RETURNSTAT  -> return
+
+IFSTAT      -> if ( EXPRESSION ) STATEMENT IFSTAT'
+
+IFSTAT'     -> else STATEMENT
+             | &
+
+FORSTAT     -> for ( ATRIBSTAT ; EXPRESSION ; ATRIBSTAT ) STATEMENT
+
+STATELIST   -> STATEMENT STATELIST
+             | &
+
+ALLOCEXPRESSION  -> new TIPO [ NUMEXPRESSION ] ALLOCEXPRESSION'
+
+TIPO        -> int
+             | float
+             | string
+
+ALLOCEXPRESSION' -> [ NUMEXPRESSION ]
+                  | &
+
+EXPRESSION  -> NUMEXPRESSION COMPARACAO {1}
+
+COMPARACAO  -> <  {2} NUMEXPRESSION {8}
+             | >  {3} NUMEXPRESSION {8}
+             | <= {4} NUMEXPRESSION {8}
+             | >= {5} NUMEXPRESSION {8}
+             | == {6} NUMEXPRESSION {8}
+             | != {7} NUMEXPRESSION {8}
+             | &  {9}
+
+NUMEXPRESSION  -> TERM {10} NUMEXPRESSION' {11}
+
+NUMEXPRESSION' -> + TERM {12} NUMEXPRESSION' {13}
+               | - TERM {14} NUMEXPRESSION' {15}
+               | & {16}
+
+TERM        -> UNARYEXPR {17} TERM' {18}
+
+TERM'       -> * UNARYEXPR {19} TERM' {20}
+             | / UNARYEXPR {21} TERM' {22}
+             | % UNARYEXPR {23} TERM' {24}
+             | & {25}
+
+UNARYEXPR   -> OPERADORES FACTOR {29}
+
+OPERADORES  -> + {26}
+             | - {27}
+             | & {28}
+
+FACTOR      -> const_inteiro {30}
+             | const_float   {31}
+             | const_string  {32}
+             | null          {33}
+             | ( NUMEXPRESSION ) {34}
+             | ident CHAMADA {35}
+
+CHAMADA     -> FUNCCALL
+             | LVALUE'
+
+LVALUE      -> ident LVALUE'
+
+LVALUE'     -> [ NUMEXPRESSION ] LVALUE'
+             | &
+
+
+
+AÇÕES SEMÂNTICAS
+
+(1)
+if COMPARACAO.tipo is not None then
+    # houve operador relacional
+    if NUMEXPRESSION.tipo != COMPARACAO.tipo then
+        ERRO_SEMANTICO("Tipos incompatíveis em comparação")
+    else
+        nodo = new Nodo()
+        nodo.operador = COMPARACAO.op        # '<', '>', '<=', ...
+        nodo.esquerda = NUMEXPRESSION.topo   # expr da esquerda
+        nodo.direita  = COMPARACAO.topo      # expr da direita
+        nodo.tipo     = "bool"
+
+        EXPRESSION.topo   = nodo
+        EXPRESSION.tipo   = nodo.tipo
+        EXPRESSION.codigo = NUMEXPRESSION.codigo
+                             + COMPARACAO.codigo
+                             + COMPARACAO.codigo_comparacao
+else
+    # não houve comparação: só expressão numérica
+    EXPRESSION.topo   = NUMEXPRESSION.topo
+    EXPRESSION.tipo   = NUMEXPRESSION.tipo
+    EXPRESSION.codigo = NUMEXPRESSION.codigo
+
+(2) COMPARACAO.op = "<"
+    COMPARACAO.codigo_comparacao = gerarCodigoOperador("<")
+
+(3) COMPARACAO.op = ">"
+    COMPARACAO.codigo_comparacao = gerarCodigoOperador(">")
+
+(4) COMPARACAO.op = "<="
+    COMPARACAO.codigo_comparacao = gerarCodigoOperador("<=")
+
+(5) COMPARACAO.op = ">="
+    COMPARACAO.codigo_comparacao = gerarCodigoOperador(">=")
+
+(6) COMPARACAO.op = "=="
+    COMPARACAO.codigo_comparacao = gerarCodigoOperador("==")
+
+(7) COMPARACAO.op = "!="
+    COMPARACAO.codigo_comparacao = gerarCodigoOperador("!=")
+
+(8)
+COMPARACAO.topo   = NUMEXPRESSION.topo
+COMPARACAO.tipo   = NUMEXPRESSION.tipo
+COMPARACAO.codigo = NUMEXPRESSION.codigo
+
+(9)
+COMPARACAO.topo   = None
+COMPARACAO.tipo   = None
+COMPARACAO.codigo = ""
+COMPARACAO.op     = None
+COMPARACAO.codigo_comparacao = ""
+
+(10)
+NUMEXPRESSION'.acum_topo = TERM.topo
+NUMEXPRESSION'.acum_tipo = TERM.tipo
+
+(11)
+NUMEXPRESSION.topo   = NUMEXPRESSION'.topo
+NUMEXPRESSION.tipo   = NUMEXPRESSION'.tipo
+NUMEXPRESSION.codigo = gerarCodigo(NUMEXPRESSION.topo)
+
+(12)
+nodo = new Nodo()
+nodo.operador = '+'
+nodo.esquerda = NUMEXPRESSION'.acum_topo  # expressão acumulada até agora
+nodo.direita  = TERM.topo                 # novo termo
+if NUMEXPRESSION'.acum_tipo != TERM.tipo then
+    ERRO_SEMANTICO("Tipos incompatíveis em soma")
+else
+    nodo.tipo = TERM.tipo
+
+# passa o acumulado para a próxima cauda NUMEXPRESSION'1
+NUMEXPRESSION'1.acum_topo = nodo
+NUMEXPRESSION'1.acum_tipo = nodo.tipo
+
+(13)
+NUMEXPRESSION'.topo = NUMEXPRESSION'1.topo
+NUMEXPRESSION'.tipo = NUMEXPRESSION'1.tipo
+
+(14)
+nodo = new Nodo()
+nodo.operador = '-'
+nodo.esquerda = NUMEXPRESSION'.acum_topo
+nodo.direita  = TERM.topo
+if NUMEXPRESSION'.acum_tipo != TERM.tipo then
+    ERRO_SEMANTICO("Tipos incompatíveis em subtração")
+else
+    nodo.tipo = TERM.tipo
+
+NUMEXPRESSION'1.acum_topo = nodo
+NUMEXPRESSION'1.acum_tipo = nodo.tipo
+
+(15)
+NUMEXPRESSION'.topo = NUMEXPRESSION'1.topo
+NUMEXPRESSION'.tipo = NUMEXPRESSION'1.tipo
+
+(16)
+NUMEXPRESSION'.topo = NUMEXPRESSION'.acum_topo
+NUMEXPRESSION'.tipo = NUMEXPRESSION'.acum_tipo
+
+(17)
+TERM'.acum_topo = UNARYEXPR.topo
+TERM'.acum_tipo = UNARYEXPR.tipo
+
+(18)
+TERM.topo   = TERM'.topo
+TERM.tipo   = TERM'.tipo
+TERM.codigo = gerarCodigo(TERM.topo)
+
+(19)
+nodo = new Nodo()
+nodo.operador = '*'
+nodo.esquerda = TERM'.acum_topo      # expressão acumulada até aqui
+nodo.direita  = UNARYEXPR.topo       # novo fator
+if TERM'.acum_tipo != UNARYEXPR.tipo then
+    ERRO_SEMANTICO("Tipos incompatíveis em multiplicação")
+else
+    nodo.tipo = UNARYEXPR.tipo
+
+TERM'1.acum_topo = nodo
+TERM'1.acum_tipo = nodo.tipo
+
+(20)
+TERM'.topo = TERM'1.topo
+TERM'.tipo = TERM'1.tipo
+
+(21)
+nodo = new Nodo()
+nodo.operador = '/'
+nodo.esquerda = TERM'.acum_topo
+nodo.direita  = UNARYEXPR.topo
+if TERM'.acum_tipo != UNARYEXPR.tipo then
+    ERRO_SEMANTICO("Tipos incompatíveis em divisão")
+else
+    nodo.tipo = UNARYEXPR.tipo
+
+TERM'1.acum_topo = nodo
+TERM'1.acum_tipo = nodo.tipo
+
+(22)
+TERM'.topo = TERM'1.topo
+TERM'.tipo = TERM'1.tipo
+
+(23)
+nodo = new Nodo()
+nodo.operador = '%'
+nodo.esquerda = TERM'.acum_topo
+nodo.direita  = UNARYEXPR.topo
+if TERM'.acum_tipo != UNARYEXPR.tipo then
+    ERRO_SEMANTICO("Tipos incompatíveis em módulo")
+else
+    nodo.tipo = UNARYEXPR.tipo
+
+TERM'1.acum_topo = nodo
+TERM'1.acum_tipo = nodo.tipo
+
+(24)
+TERM'.topo = TERM'1.topo
+TERM'.tipo = TERM'1.tipo	
+
+(25)
+TERM'.topo = TERM'.acum_topo
+TERM'.tipo = TERM'.acum_tipo
+
+(26) OPERADORES.op = '+'
+
+(27) OPERADORES.op = '-'
+
+(28) OPERADORES.op = None    # caso epsilon
+
+(29)
+if OPERADORES.op == '+':
+    # +x ≡ x, mas só faz sentido para tipos numéricos
+    if FACTOR.tipo not in ("int", "float") then
+        ERRO_SEMANTICO("Operador unário '+' só permitido para int/float")
+    UNARYEXPR.topo  = FACTOR.topo
+    UNARYEXPR.tipo  = FACTOR.tipo
+    UNARYEXPR.valor = FACTOR.valor
+
+elif OPERADORES.op == '-':
+    if FACTOR.tipo not in ("int", "float") then
+        ERRO_SEMANTICO("Operador unário '-' só permitido para int/float")
+
+    nodo = new Nodo()
+    nodo.operador = 'uminus'      # ou '-' unário
+    nodo.esquerda = FACTOR.topo
+    nodo.direita  = None
+    nodo.tipo     = FACTOR.tipo
+
+    UNARYEXPR.topo  = nodo
+    UNARYEXPR.tipo  = nodo.tipo
+    # se quiser constant folding:
+    # UNARYEXPR.valor = -FACTOR.valor
+
+else:  # OPERADORES.op is None (sem operador unário)
+    UNARYEXPR.topo  = FACTOR.topo
+    UNARYEXPR.tipo  = FACTOR.tipo
+    UNARYEXPR.valor = FACTOR.valor
+
+(30)
+FACTOR.valor = valor_do_token_inteiro   # ex: token.valor
+FACTOR.tipo  = "int"
+
+nodo = new Nodo()
+nodo.operador = "const"
+nodo.valor    = FACTOR.valor
+nodo.tipo     = FACTOR.tipo
+nodo.esquerda = None
+nodo.direita  = None
+
+FACTOR.topo   = nodo
+FACTOR.codigo = gerarCodigo(nodo)      # opcional
+
+(31)
+FACTOR.valor = valor_do_token_float
+FACTOR.tipo  = "float"
+
+nodo = new Nodo()
+nodo.operador = "const"
+nodo.valor    = FACTOR.valor
+nodo.tipo     = FACTOR.tipo
+nodo.esquerda = None
+nodo.direita  = None
+
+FACTOR.topo   = nodo
+FACTOR.codigo = gerarCodigo(nodo)
+
+(32)
+FACTOR.valor = valor_do_token_string
+FACTOR.tipo  = "string"
+
+nodo = new Nodo()
+nodo.operador = "const"
+nodo.valor    = FACTOR.valor
+nodo.tipo     = FACTOR.tipo
+nodo.esquerda = None
+nodo.direita  = None
+
+FACTOR.topo   = nodo
+FACTOR.codigo = gerarCodigo(nodo)
+
+(33)
+FACTOR.valor = None         # ou "null"
+FACTOR.tipo  = "null"       # ou um tipo especial, dependendo da linguagem
+
+nodo = new Nodo()
+nodo.operador = "const"
+nodo.valor    = FACTOR.valor
+nodo.tipo     = FACTOR.tipo
+nodo.esquerda = None
+nodo.direita  = None
+
+FACTOR.topo   = nodo
+FACTOR.codigo = gerarCodigo(nodo)
+
+(34)
+FACTOR.topo   = NUMEXPRESSION.topo    # parênteses não mudam a árvore
+FACTOR.tipo   = NUMEXPRESSION.tipo
+FACTOR.valor  = None                  # não é literal direto
+FACTOR.codigo = NUMEXPRESSION.codigo
+
+(35)
+# suponha que 'ident' tenha lexema L e posição (linha, coluna)
+
+entrada = procurarNaTabelaDeSimbolos(lexema_ident)
+
+if entrada is None then
+    ERRO_SEMANTICO("Identificador '" + lexema_ident + "' não declarado")
+
+# entrada.tipo é o tipo da variável ou tipo de retorno da função
+FACTOR.tipo = entrada.tipo
+
+nodo = new Nodo()
+nodo.operador = "id"
+nodo.valor    = lexema_ident
+nodo.tipo     = entrada.tipo
+nodo.esquerda = None
+nodo.direita  = None
+
+FACTOR.topo   = nodo
+FACTOR.codigo = gerarCodigo(nodo)   # depois você pode incluir info de CHAMADA (função ou índice)
+
+(36)
+# token 'ident' traz lexema e posição
+lexema_ident  = token_ident.lexema
+linha_ident   = token_ident.linha
+coluna_ident  = token_ident.coluna
+
+if existeNoEscopoAtual(lexema_ident) then
+    ERRO_SEMANTICO("Redeclaração do identificador '" + lexema_ident + "' no mesmo escopo")
+
+VARDECL.nome   = lexema_ident
+VARDECL.linha  = linha_ident
+VARDECL.coluna = coluna_ident
+
+(37)
+VARDECL.dimensoes = CONSTANTE.val
+
+(38)  # CONSTANTE -> [ const_inteiro ] CONSTANTE_filho {38}
+
+# opcional: validar o tamanho
+if valor_const_inteiro <= 0 then
+    ERRO_SEMANTICO("Tamanho de vetor deve ser positivo")
+
+# CONSTANTE_filho.val já foi calculado
+CONSTANTE.val = CONSTANTE_filho.val + 1
+
+(39)  # CONSTANTE -> & {39}
+CONSTANTE.val = 0
+
+(40)  # ramo: VARDECL -> int ident {36} CONSTANTE {37} {40}
+inserirNaTabela(
+    nome       = VARDECL.nome,
+    tipo       = "int",
+    dimensoes  = VARDECL.dimensoes,
+    escopo     = escopo_atual(),
+    linha_decl = VARDECL.linha,
+    coluna_decl= VARDECL.coluna
+)
+
+(41)  # ramo: VARDECL -> float ident ...
+inserirNaTabela(
+    nome       = VARDECL.nome,
+    tipo       = "float",
+    dimensoes  = VARDECL.dimensoes,
+    escopo     = escopo_atual(),
+    linha_decl = VARDECL.linha,
+    coluna_decl= VARDECL.coluna
+)
+
+(42)  # ramo: VARDECL -> string ident ...
+inserirNaTabela(
+    nome       = VARDECL.nome,
+    tipo       = "string",
+    dimensoes  = VARDECL.dimensoes,
+    escopo     = escopo_atual(),
+    linha_decl = VARDECL.linha,
+    coluna_decl= VARDECL.coluna
+)
