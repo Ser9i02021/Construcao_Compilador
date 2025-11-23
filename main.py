@@ -4,18 +4,14 @@ from semantico import *
 
 def entrada():
     codigo = """
-    def leonardo(float teste, int teste){
-    break;
-    leonardo = 10;
-    int teste;
-    leonardo = teste[1];
-    string leonardo[10];
-    leonardo = teste / leonardo;
-    leonardo = teste();
-    teste = new string [5];
-    if(leonardo() > 10) break;;
+def quebra_certa1(){
+    int i;
+    i = 0;
+    for(i = 0; i < 10; i = i + 1) {
+        break;
     }
-    """
+}
+"""
     return codigo
 
 def token_para_string(lista):
@@ -41,8 +37,6 @@ def main():
     analisador_sintatico(tokens)
 
     analisador_semantico(tokens, tabela_simbolos)
-
-    print("O código é reconhecido pela gramática!")
 
 main()
 
