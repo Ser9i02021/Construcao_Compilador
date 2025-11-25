@@ -1,6 +1,7 @@
 from lexico import *
 from sintatico import *
 from semantico import *
+from intermediario import *
 
 def entrada():
     codigo = """
@@ -36,7 +37,9 @@ def main():
 
     analisador_sintatico(tokens)
 
-    analisador_semantico(tokens, tabela_simbolos)
+    escopo_por_token = analisador_semantico(tokens, tabela_simbolos)
+
+    analisador_intermediario(tokens, tabela_simbolos, escopo_por_token)
 
 main()
 

@@ -114,6 +114,8 @@ def analisador_semantico(tokens, tabela_simbolos):
         nome = tabela_simbolos[idx][0]
         print(f"{idx}: {nome} : {tipo}")
 
+    return escopo_por_token
+
 
 
 
@@ -524,6 +526,8 @@ def processar_expressoes(tokens, tabela_simbolos,
       - opcionalmente imprime as árvores em pré-ordem.
     """
     pilha_escopos = [escopo_global]
+    pilha_loops = []  # pilha de loops para validar 'break'
+    
     i = 0
     n = len(tokens)
 
@@ -684,3 +688,5 @@ def processar_expressoes(tokens, tabela_simbolos,
             continue
 
         i += 1
+        
+
