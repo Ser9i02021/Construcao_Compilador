@@ -5,12 +5,10 @@ from intermediario import *
 
 def entrada():
     codigo = """
-def quebra_certa1(){
-    int i;
-    i = 0;
-    for(i = 0; i < 10; i = i + 1) {
-        break;
-    }
+def main(int a, float b){
+    int x;
+    x = a + 10;
+    print x;
 }
 """
     return codigo

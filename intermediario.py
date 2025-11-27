@@ -152,6 +152,8 @@ def analisador_intermediario(tokens, tabela_simbolos, escopo_por_token):
             i += 1
             continue
         i += 1
+    
+    codigo.append("return")
     if codigo:
         print("\n=== Código Intermediário (3-endereços) ===")
         for c in codigo:
