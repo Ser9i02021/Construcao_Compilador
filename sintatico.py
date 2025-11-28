@@ -66,7 +66,7 @@ def analisador_sintatico(tokens):
             tok = tokens[token_atual]
             raise Exception(
                 f"Erro sintático na linha {tok.l}, coluna {tok.c}: "
-                f"esperado '{pilha[-1]}', encontrado '{tok.tipo}'."
+                f"token inesperado '{tok.tipo}' após fim da análise."
             )
 
 
