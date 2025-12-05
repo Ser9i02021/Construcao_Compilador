@@ -1,67 +1,51 @@
 from lexico import *
 from dicionario_tabelall1 import *
 
-"""
-GRAMÁTICA EM LL(1):
-
-PROGRAM -> STATEMENT | FUNCLIST | &
-FUNCLIST -> FUNCDEF FUNCLIST'
-FUNCLIST' -> FUNCDEF FUNCLIST' | &
-FUNCDEF -> def ident(PARAMLIST){STATELIST}
-PARAMLIST -> PARAMETRO PARAMLIST' | &
-PARAMETRO -> int ident | float ident | string ident
-PARAMLIST' -> , PARAMETRO PARAMLIST' | &
-STATEMENT -> VARDECL; | ATRIBSTAT; | PRINTSTAT; | READSTAT; | RETURNSTAT; | IFSTAT; | FORSTAT; | {STATELIST} | break; | ;
-VARDECL -> int ident CONSTANTE | float ident CONSTANTE | string ident CONSTANTE
-CONSTANTE -> [const_inteiro] CONSTANTE | &
-ATRIBSTAT -> LVALUE = ATRIBSTAT'
-ATRIBSTAT' -> EXPRESSION | ALLOCEXPRESSION
-FUNCCALL -> (PARAMLISTCALL)
-PARAMLISTCALL -> ident PARAMLISTCALL' | &
-PARAMLISTCALL' -> , ident PARAMLISTCALL' | &
-PRINTSTAT -> print EXPRESSION
-READSTAT -> read LVALUE
-RETURNSTAT -> return
-IFSTAT -> if( EXPRESSION ) STATEMENT IFSTAT'
-IFSTAT' -> else STATEMENT | &
-FORSTAT -> for(ATRIBSTAT; EXPRESSION; ATRIBSTAT) STATEMENT
-STATELIST -> STATEMENT STATELIST | &
-ALLOCEXPRESSION -> new TIPO [NUMEXPRESSION] ALLOCEXPRESSION'
-TIPO -> int | float | string
-ALLOCEXPRESSION' -> [NUMEXPRESSION] | &
-EXPRESSION -> NUMEXPRESSION COMPARACAO
-COMPARACAO -> < NUMEXPRESSION | > NUMEXPRESSION | <= NUMEXPRESSION | >= NUMEXPRESSION | == NUMEXPRESSION | != NUMEXPRESSION | &
-NUMEXPRESSION -> TERM NUMEXPRESSION'
-NUMEXPRESSION' -> + TERM NUMEXPRESSION' | - TERM NUMEXPRESSION' | &
-TERM -> UNARYEXPR TERM'
-TERM' -> * UNARYEXPR TERM' | / UNARYEXPR TERM' | % UNARYEXPR TERM' | &
-UNARYEXPR -> OPERADORES FACTOR
-OPERADORES -> + | - | &
-FACTOR -> const_inteiro | const_float | const_string | null | (NUMEXPRESSION) | ident CHAMADA
-CHAMADA -> FUNCCALL | LVALUE'
-LVALUE -> ident LVALUE'
-LVALUE' -> [NUMEXPRESSION] LVALUE' | &
-"""
-
-class Nodo:
-    def __init__(self,token,pai):
-        self.Token = token
-        self.pai = pai
-        self.filhos = []
-
 def analisador_sintatico(tokens):
-    tokens.append(Token("$","None",0,0))
+    """
+    Implementa um analisador sintático preditivo LL(1) baseado em tabela.
+
+    Entrada:
+        tokens: lista de objetos Token produzidos pelo analisador léxico.
+
+    Comportamento:
+        - Usa uma pilha de símbolos (terminais e não-terminais);
+        - Consulta a tabela LL(1) (dicionário em dicionario_tabelall1.py);
+        - Em caso de erro, lança Exception com mensagem clara de linha/coluna;
+        - Em caso de sucesso, imprime "Análise sintática ocorreu com sucesso!".
+
+    Saída:
+        Nenhuma estrutura é retornada (reconhecimento apenas). Em caso de erro,
+        uma exceção é lançada.
+    """
+
+    # Adiciona símbolo de fim de entrada na lista de tokens
+    tokens.append(Token("$", "None", 0, 0))
+
+    # Carrega tabela LL(1) (não-terminais x terminais -> produção)
     tabela_ll1 = dicionario()
+
+    # Índice do token atual na lista
     token_atual = 0
+
+    # Pilha de análise: começa com o símbolo inicial da gramática
     pilha = ["PROGRAM"]
 
-    terminais = ['!=', '%', '(', ')', '*', '+', ',', '-', '/', ';', '<', '<=', '=', '==', '>', '>=', '[', ']', 'break', 'const_float', 'const_inteiro', 'const_string', 'def', 'else', 'float', 'for', 'ident', 'if', 'int', 'new', 'null', 'print', 'read', 'return', 'string', '{', '}']
+    # Conjunto de terminais conhecidos pela gramática
+    terminais = [
+        '!=', '%', '(', ')', '*', '+', ',', '-', '/', ';', '<', '<=', '=', '==',
+        '>', '>=', '[', ']', 'break', 'const_float', 'const_inteiro',
+        'const_string', 'def', 'else', 'float', 'for', 'ident', 'if', 'int',
+        'new', 'null', 'print', 'read', 'return', 'string', '{', '}'
+    ]
 
-    while True :
+    while True:
+        # Caso de sucesso: esgotou a pilha e chegou ao fim da entrada
         if tokens[token_atual].tipo == "$" and len(pilha) == 0:
             print("Análise sintática ocorreu com sucesso!")
             break
 
+        # Se a pilha acabou, mas ainda há tokens, temos erro
         if len(pilha) == 0:
             tok = tokens[token_atual]
             raise Exception(
@@ -69,25 +53,41 @@ def analisador_sintatico(tokens):
                 f"token inesperado '{tok.tipo}' após fim da análise."
             )
 
+        topo = pilha[-1]
+        lookahead = tokens[token_atual].tipo
 
-        if pilha[-1] in terminais:
-            if pilha[-1] == tokens[token_atual].tipo:
+        # ---------------------------------------------------------------------
+        # Caso 1: o topo da pilha é um terminal
+        #         -> deve casar exatamente com o token corrente.
+        # ---------------------------------------------------------------------
+        if topo in terminais:
+            if topo == lookahead:
+                # Consome o terminal e avança no input
                 pilha.pop()
                 token_atual += 1
             else:
                 tok = tokens[token_atual]
                 raise Exception(
                     f"Erro sintático na linha {tok.l}, coluna {tok.c}: "
-                    f"esperado '{pilha[-1]}', encontrado '{tok.tipo}'."
+                    f"esperado '{topo}', encontrado '{tok.tipo}'."
                 )
 
+        # ---------------------------------------------------------------------
+        # Caso 2: o topo da pilha é um não-terminal
+        #         -> consulta a tabela LL(1) para decidir qual produção usar.
+        # ---------------------------------------------------------------------
         else:
-            producao = tabela_ll1.get(pilha[-1], {}).get(tokens[token_atual].tipo)
+            producao = tabela_ll1.get(topo, {}).get(lookahead)
+
             if producao:
+                # Remove o não-terminal do topo
                 pilha.pop()
-                for especifico in reversed(producao):
-                    if especifico != "&":
-                     pilha.append(especifico)
+
+                # Empilha a produção correspondente em ordem reversa
+                # (pois a pilha é LIFO)
+                for simbolo in reversed(producao):
+                    if simbolo != "&":  # & representa epsilon (produção vazia)
+                        pilha.append(simbolo)
             else:
                 tok = tokens[token_atual]
                 raise Exception(
@@ -96,4 +96,3 @@ def analisador_sintatico(tokens):
                 )
 
     return
-
