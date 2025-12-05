@@ -1,0 +1,190 @@
+def imprimeMensagem(string texto){
+    print texto;
+}
+
+def imprimeMensagemNumero(string texto, int numero){
+    print texto;
+    print numero;
+}
+
+def repetirMensagem(string texto, int vezes){
+    int i;
+    i = 0;
+    for(i = 0; i < vezes; i = i + 1){
+        print texto;
+    }
+}
+
+def mostrarIntervalo(int inicio, int fim){
+    int i;
+    i = inicio;
+    for(i = inicio; i <= fim; i = i + 1){
+        print i;
+    }
+}
+
+def testarStrings(){
+    string a;
+    string b;
+    string c;
+    a = "Conv";
+    b = "CC";
+    c = "ConvCC";
+    if(a == "Conv"){
+        print a;
+    }
+    if(b == "CC"){
+        print b;
+    }
+    if(c == "ConvCC"){
+        print c;
+    }
+}
+
+def escolheMaior(int a, int b){
+    int m;
+    m = a;
+    if(b > a){
+        m = b;
+    }
+    print m;
+}
+
+def main(){
+    string mensagem;
+    string mensagem2;
+    int vezes;
+    int vezes2;
+    int i;
+    int acumulador;
+    int resultado;
+    int a;
+    int b;
+    int c;
+    int d;
+    int limite;
+    int pares;
+
+    mensagem = "Ola ConvCC";
+    mensagem2 = "fim";
+    vezes = 3;
+    vezes2 = 2;
+    i = 0;
+    acumulador = 0;
+    resultado = 0;
+
+    a = 0;
+    b = 3;
+    c = 5;
+    d = 7;
+
+    limite = 10;
+    pares = 0;
+
+    for(i = 0; i < 3; i = i + 1){
+        acumulador = acumulador + 1;
+    }
+    print acumulador;
+
+    resultado = 10;
+    resultado = resultado + 5;
+    resultado = resultado - 2;
+    if(resultado > 10){
+        resultado = resultado - 1;
+    }
+    else{
+        resultado = resultado + 1;
+    }
+    resultado = resultado + 1;
+    print resultado;
+
+    resultado = resultado % 5;
+    print resultado;
+
+    for(i = 0; i < 4; i = i + 1){
+        if(i == 0){
+            resultado = resultado + 10;
+        }
+        else{
+            if(i == 1){
+                resultado = resultado - 3;
+            }
+            else{
+                resultado = resultado + 1;
+            }
+        }
+    }
+    print resultado;
+
+    i = 0;
+    for(i = 0; i < 5; i = i + 1){
+        acumulador = acumulador + i;
+    }
+    print acumulador;
+
+    resultado = 0;
+    for(i = 1; i <= 5; i = i + 1){
+        resultado = resultado + i;
+    }
+    print resultado;
+
+    resultado = 0;
+    for(i = 0; i < 5; i = i + 1){
+        resultado = resultado + vezes;
+    }
+    print resultado;
+
+    i = 0;
+    pares = 0;
+    for(i = 0; i <= limite; i = i + 1){
+        if(i % 2 == 0){
+            pares = pares + 1;
+        }
+    }
+    resultado = pares;
+    print resultado;
+
+    resultado = resultado + acumulador;
+    print resultado;
+
+    if(resultado > 20){
+        resultado = resultado / 2;
+    }
+    else{
+        resultado = resultado * 2;
+    }
+    print resultado;
+
+    resultado = resultado % 3;
+    print resultado;
+
+    resultado = resultado + i;
+    print resultado;
+
+    for(i = 0; i < 3; i = i + 1){
+        resultado = resultado + 1;
+    }
+    print resultado;
+
+    for(i = 0; i < 5; i = i + 1){
+        if(i < 2){
+            resultado = resultado + 1;
+        }
+        else{
+            resultado = resultado - 1;
+        }
+    }
+    print resultado;
+
+    resultado = imprimeMensagem(mensagem);
+    resultado = imprimeMensagemNumero(mensagem, vezes);
+    resultado = repetirMensagem(mensagem, vezes);
+    resultado = mostrarIntervalo(a, b);
+    resultado = mostrarIntervalo(c, d);
+    resultado = repetirMensagem(mensagem2, vezes2);
+    resultado = escolheMaior(vezes, acumulador);
+    resultado = testarStrings();
+
+    resultado = resultado + pares;
+    print resultado;
+}
