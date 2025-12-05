@@ -1,35 +1,75 @@
 # semantico.py
+#
+# Responsável pela análise semântica:
+# - Controle de escopos (global, função, bloco)
+# - Tabela de símbolos semântica (variáveis, parâmetros, funções)
+# - Verificação de:
+#     * redeclarações
+#     * uso de identificadores não declarados
+#     * uso de break fora de laços
+#     * tipos em expressões e atribuições
+# - Construção de árvores de expressão para debug (pré-ordem impressa)
+
 
 from lexico import tabela_simbolos, Token
 
+
 class SemanticError(Exception):
+    """Exceção específica para erros semânticos."""
     pass
 
 
 class SimboloSemantico:
+    """
+    Entrada da tabela de símbolos semântica.
+
+    Atributos:
+        nome      : nome do identificador (string)
+        tipo      : 'int', 'float', 'string' ou None (para funções, por exemplo)
+        categoria : 'var', 'param' ou 'func'
+        escopo    : referência para o objeto Escopo onde foi declarado
+        linha_decl, coluna_decl : posição da declaração no código fonte
+    """
     def __init__(self, nome, tipo, categoria, escopo, linha_decl, coluna_decl):
-        self.nome = nome           # string
-        self.tipo = tipo           # 'int', 'float', 'string' ou None
-        self.categoria = categoria # 'var', 'param', 'func'
-        self.escopo = escopo       # referência para Escopo
+        self.nome = nome
+        self.tipo = tipo
+        self.categoria = categoria
+        self.escopo = escopo
         self.linha_decl = linha_decl
         self.coluna_decl = coluna_decl
 
     def __repr__(self):
-        return f"{self.categoria} {self.tipo} {self.nome} (decl @ {self.linha_decl},{self.coluna_decl})"
+        return (
+            f"{self.categoria} {self.tipo} {self.nome} "
+            f"(decl @ {self.linha_decl},{self.coluna_decl})"
+        )
 
 
 class Escopo:
+    """
+    Representa um escopo léxico (global, de função ou de bloco).
+
+    Atributos:
+        nome    : nome simbólico do escopo (ex.: "global", "func_f", "bloco_10_5")
+        pai     : escopo imediatamente externo (ou None no global)
+        tipo    : 'global', 'func' ou 'bloco'
+        simbolos: dicionário nome -> SimboloSemantico
+    """
     def __init__(self, nome, pai=None, tipo="bloco"):
         self.nome = nome
         self.pai = pai
-        self.tipo = tipo           # 'global', 'func', 'bloco'
-        self.simbolos = {}         # nome -> SimboloSemantico
+        self.tipo = tipo
+        self.simbolos = {}
 
     def contem(self, nome):
+        """Retorna True se o nome já está declarado neste escopo (sem olhar os pais)."""
         return nome in self.simbolos
 
     def procura(self, nome):
+        """
+        Procura um símbolo subindo na cadeia de escopos (aninhamento léxico).
+        Retorna o SimboloSemantico ou None se não encontrar.
+        """
         esc = self
         while esc is not None:
             if nome in esc.simbolos:
@@ -38,11 +78,21 @@ class Escopo:
         return None
 
 
+# ----------------------------------------------------------------------
+# Funções auxiliares de manipulação de escopo e declaração de símbolos
+# ----------------------------------------------------------------------
+
 def escopo_atual(pilha_escopos):
+    """Retorna o escopo que está no topo da pilha de escopos."""
     return pilha_escopos[-1]
 
 
 def declara_variavel(nome, tipo, token_ident, pilha_escopos):
+    """
+    Declara uma variável no escopo atual.
+
+    Lança erro se o nome já estiver declarado no mesmo escopo.
+    """
     escopo = escopo_atual(pilha_escopos)
     if escopo.contem(nome):
         raise SemanticError(
@@ -55,6 +105,11 @@ def declara_variavel(nome, tipo, token_ident, pilha_escopos):
 
 
 def declara_parametro(nome, tipo, token_ident, pilha_escopos):
+    """
+    Declara um parâmetro no escopo atual (que deve ser o escopo da função).
+
+    Também verifica se já existe símbolo com o mesmo nome nesse escopo.
+    """
     escopo = escopo_atual(pilha_escopos)
     if escopo.contem(nome):
         raise SemanticError(
@@ -67,6 +122,11 @@ def declara_parametro(nome, tipo, token_ident, pilha_escopos):
 
 
 def declara_funcao(nome, token_ident, pilha_escopos):
+    """
+    Declara uma função no escopo global.
+
+    Impede redeclaração de função ou uso de identificador já existente no global.
+    """
     global_escopo = pilha_escopos[0]
     if global_escopo.contem(nome):
         raise SemanticError(
@@ -78,21 +138,44 @@ def declara_funcao(nome, token_ident, pilha_escopos):
     )
 
 
+# ----------------------------------------------------------------------
+# Função principal do analisador semântico (duas passadas)
+# ----------------------------------------------------------------------
+
 def analisador_semantico(tokens, tabela_simbolos):
-    # escopo global
+    """
+    Executa a análise semântica em duas passadas:
+
+    1ª passada (processar_declaracoes_e_escopos):
+        - constrói a hierarquia de escopos (global, funções, blocos)
+        - declara variáveis, parâmetros e funções
+        - verifica uso de 'break' dentro de laços
+        - preenche o vetor escopo_por_token com o escopo ativo em cada posição
+
+    2ª passada (processar_expressoes):
+        - analisa expressões e atribuições
+        - verifica tipos nas expressões (int/float/string)
+        - valida compatibilidade de tipos em atribuições e operações
+        - imprime árvores de expressão (para debug)
+
+    Ao final, imprime um resumo dos tipos associados a cada índice da tabela léxica.
+    Retorna:
+        escopo_por_token: lista em que cada posição indica o Escopo usado naquele token.
+    """
+    # Escopo global
     escopo_global = Escopo("global", None, "global")
     pilha_escopos = [escopo_global]
 
-    # para o ponto 5 (break em for)
+    # Pilha de laços (para validar 'break')
     pilha_loops = []
 
-    # índice (da tabela do léxico) -> tipo
+    # Mapeia índice na tabela de símbolos léxica -> tipo inferido/atribuído
     tipos_por_indice = {}
 
-    # escopo em que cada token é analisado (posição i -> Escopo)
+    # Escopo em que cada token é analisado (posição i -> Escopo)
     escopo_por_token = [None] * len(tokens)
 
-    # 1ª passada: declarações, escopos, break, e preenche escopo_por_token
+    # 1ª passada: declarações, escopos, 'break', etc.
     processar_declaracoes_e_escopos(
         tokens, tabela_simbolos,
         pilha_escopos, pilha_loops,
@@ -108,7 +191,15 @@ def analisador_semantico(tokens, tabela_simbolos):
         escopo_por_token,
     )
 
+    # Se chegamos aqui sem lançar SemanticError, então:
+    #  - as expressões aritméticas passaram na verificação de tipos;
+    #  - as declarações de variáveis por escopo são válidas;
+    #  - todos os 'break' estão corretamente dentro de laços 'for'.
+    print("Verificação de tipos das expressões aritméticas concluída com sucesso!")
+    print("Declarações de variáveis por escopo verificadas com sucesso!")
+    print("Todos os comandos 'break' estão corretamente dentro do escopo de um 'for'.")
     print("Análise semântica concluída com sucesso!")
+
     print("Tabela de símbolos com tipos (por índice do léxico):")
     for idx, tipo in tipos_por_indice.items():
         nome = tabela_simbolos[idx][0]
@@ -117,13 +208,24 @@ def analisador_semantico(tokens, tabela_simbolos):
     return escopo_por_token
 
 
-
+# ----------------------------------------------------------------------
+# 1ª passada: escopos, declarações e controle de break
+# ----------------------------------------------------------------------
 
 def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
                                     pilha_escopos, pilha_loops,
                                     tipos_por_indice,
                                     escopo_por_token):
+    """
+    Varre a lista de tokens uma vez, com foco em:
 
+      - def ... : declara funções e seus parâmetros, cria escopo de função
+      - { ... } : abre/fecha escopos de bloco
+      - declarações de variáveis (int/float/string ident ...)
+      - for(...): registra laços para validação de 'break'
+      - break    : verifica se está dentro de um laço
+      - preenche escopo_por_token com o escopo ativo em cada índice i
+    """
 
     i = 0
     n = len(tokens)
@@ -136,6 +238,9 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
 
         STATEMENT -> VARDECL; | ATRIBSTAT; | PRINTSTAT; | READSTAT; |
                      RETURNSTAT; | IFSTAT; | FORSTAT; | {STATELIST} | break; | ;
+
+        OBS: Esta função é usada principalmente para determinar o fim
+        do corpo de laços 'for' com statements simples (sem chaves).
         """
         k = inicio
         if k >= n:
@@ -143,7 +248,7 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
 
         tok0 = tokens[k]
 
-        # bloco: { STATELIST }
+        # Bloco: { STATELIST }
         if tok0.tipo == "{":
             nivel_chaves = 1
             k += 1
@@ -155,7 +260,7 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
                 k += 1
             return k  # posição logo após o '}' que fecha o bloco
 
-        # if: IFSTAT -> if( EXPRESSION ) STATEMENT IFSTAT'
+        # if: IFSTAT -> if ( EXPRESSION ) STATEMENT IFSTAT'
         if tok0.tipo == "if":
             j = k + 1
             # acha '('
@@ -188,8 +293,7 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
                 return k + 1
             return k
 
-        # for: FORSTAT -> for(ATRIBSTAT;EXPRESSION;ATRIBSTAT) STATEMENT
-        # STATEMENT -> FORSTAT ;
+        # for: FORSTAT -> for(ATRIBSTAT;EXPRESSION;ATRIBSTAT) STATEMENT ;
         if tok0.tipo == "for":
             j = k + 1
             while j < n and tokens[j].tipo != "(":
@@ -213,52 +317,56 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
                 return k + 1
             return k
 
-        # demais statements simples: até o próximo ';'
+        # Demais statements simples: até o próximo ';'
         while k < n and tokens[k].tipo != ";":
             k += 1
         if k < n:
             return k + 1
         return k
 
+    # Percorre todos os tokens
     while i < n:
-        # registra o escopo ANTES de processar o token i
+        # Registra o escopo antes de processar o token i
         escopo_por_token[i] = escopo_atual(pilha_escopos)
 
         tok = tokens[i]
 
-        # Antes de tudo: remover laços simples cujo corpo já foi totalmente percorrido
+        # Antes de tudo: remover laços "simples" cujo corpo já foi totalmente percorrido
         while pilha_loops and pilha_loops[-1].get("tipo") == "simples" \
-                and i >= pilha_loops[-1].get("fim", n+1):
+                and i >= pilha_loops[-1].get("fim", n + 1):
             pilha_loops.pop()
 
-        # 1) Início de função: def ident ( ... ) { ... }
+        # ---------------------------------------------------------
+        # 1) Início de função: def ident ( PARAMS ) { ... }
+        # ---------------------------------------------------------
         if tok.tipo == "def" and i + 1 < n and tokens[i + 1].tipo == "ident":
             ident_tok = tokens[i + 1]
             idx_ts = ident_tok.valor
             nome = tabela_simbolos[idx_ts][0]
 
+            # Registra a função no escopo global
             declara_funcao(nome, ident_tok, pilha_escopos)
 
-            # cria escopo da função e empilha
+            # Cria escopo da função e empilha
             escopo_func = Escopo(f"func_{nome}", pilha_escopos[-1], "func")
             pilha_escopos.append(escopo_func)
 
-            # tratar parâmetros da função: (TIPO ident, ...)
-            # vamos avançar até o ')'
+            # Trata parâmetros da função: (TIPO ident, ...)
             j = i + 2
-            # espera encontrar '('
+            # Avança até encontrar '('
             while j < n and tokens[j].tipo != "(":
                 j += 1
             j += 1  # pula '('
 
+            # Percorre até encontrar ')', identificando pares (tipo, ident)
             while j < n and tokens[j].tipo != ")":
-                if tokens[j].tipo in ("int", "float", "string") and j + 1 < n and tokens[j+1].tipo == "ident":
+                if tokens[j].tipo in ("int", "float", "string") and j + 1 < n and tokens[j + 1].tipo == "ident":
                     tipo = tokens[j].tipo
-                    ident_param = tokens[j+1]
+                    ident_param = tokens[j + 1]
                     idx_param = ident_param.valor
                     nome_param = tabela_simbolos[idx_param][0]
 
-                    # declara parâmetro como tal no escopo da função
+                    # Declara parâmetro no escopo da função
                     declara_parametro(nome_param, tipo, ident_param, pilha_escopos)
                     tipos_por_indice[idx_param] = tipo
                     j += 2
@@ -268,41 +376,45 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
             i = j  # continua a partir do ')'
             continue
 
-        # 2) Abre escopo de bloco
+        # ---------------------------------------------------------
+        # 2) Abre escopo de bloco: '{'
+        # ---------------------------------------------------------
         if tok.tipo == "{":
             novo = Escopo(f"bloco_{tok.l}_{tok.c}", pilha_escopos[-1], "bloco")
             pilha_escopos.append(novo)
 
-            # se houver um laço de 'for' cujo corpo é esse bloco, associa o escopo
+            # Se houver um laço 'for' cujo corpo é este bloco, associa o escopo
             if pilha_loops and pilha_loops[-1].get("tipo") == "bloco" \
                     and pilha_loops[-1].get("escopo") is None:
                 pilha_loops[-1]["escopo"] = novo
 
-        # 3) Fecha escopo
+        # ---------------------------------------------------------
+        # 3) Fecha escopo: '}'
+        # ---------------------------------------------------------
         elif tok.tipo == "}":
-            # topo da pilha sempre deve ser algum escopo
             escopo_top = pilha_escopos[-1]
 
             if escopo_top.tipo == "bloco":
                 escopo_fechado = pilha_escopos.pop()
 
-                # encerra laço 'for' cujo corpo é exatamente este bloco
+                # Encerra laço 'for' cujo corpo é exatamente este bloco
                 if pilha_loops and pilha_loops[-1].get("tipo") == "bloco" \
                         and pilha_loops[-1].get("escopo") is escopo_fechado:
                     pilha_loops.pop()
 
-                # se este bloco é o corpo principal de uma função (pai == func),
+                # Se este bloco é o corpo principal de uma função (pai == func),
                 # também fechamos o escopo da função
                 if escopo_fechado.pai is not None and escopo_fechado.pai.tipo == "func":
                     pilha_escopos.pop()  # fecha escopo da função
 
             else:
-                # escopo_top não é bloco (pode ser 'func' em algum erro de sintaxe)
+                # Caso raro de erro estrutural: apenas desempilha o escopo
                 pilha_escopos.pop()
 
-
+        # ---------------------------------------------------------
         # 4) Declaração de variável: TIPO ident ...
-        elif tok.tipo in ("int", "float", "string") and i + 1 < n and tokens[i+1].tipo == "ident":
+        # ---------------------------------------------------------
+        elif tok.tipo in ("int", "float", "string") and i + 1 < n and tokens[i + 1].tipo == "ident":
             tipo = tok.tipo
             ident_tok = tokens[i + 1]
             idx_ts = ident_tok.valor
@@ -311,9 +423,11 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
             declara_variavel(nome, tipo, ident_tok, pilha_escopos)
             tipos_por_indice[idx_ts] = tipo
 
-            i += 1  # pulamos o ident
+            i += 1  # pula o ident
 
-        # 5) Controle de laços 'for'
+        # ---------------------------------------------------------
+        # 5) Controle de laços 'for' (para validar 'break')
+        # ---------------------------------------------------------
         elif tok.tipo == "for":
             # achar o '(' do cabeçalho do for
             j = i + 1
@@ -348,14 +462,16 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
             tok_body = tokens[body_start]
 
             if tok_body.tipo == "{":
-                # corpo é um bloco; vamos associar o escopo na próxima '{'
+                # Corpo é um bloco; o escopo será atribuído quando o '{' for processado
                 pilha_loops.append({"tipo": "bloco", "escopo": None})
             else:
-                # corpo é um STATEMENT simples: calculamos onde ele termina
+                # Corpo é um STATEMENT simples: calculamos onde ele termina
                 fim = encontrar_fim_statement(body_start)
                 pilha_loops.append({"tipo": "simples", "fim": fim})
 
-        # 6) Comando 'break'
+        # ---------------------------------------------------------
+        # 6) Comando 'break': deve estar dentro de algum laço
+        # ---------------------------------------------------------
         elif tok.tipo == "break":
             if not pilha_loops:
                 raise SemanticError(
@@ -365,14 +481,21 @@ def processar_declaracoes_e_escopos(tokens, tabela_simbolos,
         i += 1
 
 
+# ----------------------------------------------------------------------
+# Representação de árvores de expressão (para debug)
+# ----------------------------------------------------------------------
+
 class ExprNode:
+    """
+    Nó de árvore de expressão.
+
+    op    : operador ou "tipo" da folha ('+', '-', '*', 'id', 'int', 'float', etc.)
+    left  : filho esquerdo
+    right : filho direito
+    valor : valor associado (nome do identificador, literal, símbolo do operador)
+    tipo  : tipo da expressão resultante ('int', 'float', 'string', None, ...)
+    """
     def __init__(self, op, left=None, right=None, valor=None, tipo=None):
-        """
-        op: '+', '-', '*', '/', '%', 'id', 'int', 'float', 'string', 'null', etc.
-        left, right: filhos
-        valor: para folhas (nome do ident, valor literal, operador)
-        tipo: tipo inferido da expressão ('int', 'float', 'string', ...)
-        """
         self.op = op
         self.left = left
         self.right = right
@@ -387,6 +510,9 @@ class ExprNode:
 
 
 def print_preordem(node):
+    """
+    Imprime a árvore de expressão em pré-ordem (para depuração).
+    """
     if node is None:
         return
     if node.valor is not None:
@@ -397,42 +523,58 @@ def print_preordem(node):
     print_preordem(node.right)
 
 
-# ---------------- PARSER DE EXPRESSÕES ----------------
+# ----------------------------------------------------------------------
+# Parser de expressões (usado na 2ª passada)
+# ----------------------------------------------------------------------
 
 def parse_expression(tokens, i, tabela_simbolos, escopo):
+    """
+    EXPRESSAO -> NUMEXPRESSION COMPARACAO
+    COMPARACAO opcional: <, >, <=, >=, ==, !=
+    """
     node, i = parse_numexpression(tokens, i, tabela_simbolos, escopo)
     # COMPARACAO opcional
     if i < len(tokens) and tokens[i].tipo in ("<", ">", "<=", ">=", "==", "!="):
         op = tokens[i].tipo
         i += 1
         right, i = parse_numexpression(tokens, i, tabela_simbolos, escopo)
-        node = combinar_binario(op, node, right, tokens[i-1])
+        node = combinar_binario(op, node, right, tokens[i - 1])
         # tipo da comparação poderia ser 'bool', se você quiser guardar isso
     return node, i
 
 
 def parse_numexpression(tokens, i, tabela_simbolos, escopo):
+    """
+    NUMEXPRESSION -> TERM NUMEXPRESSION'
+    NUMEXPRESSION' -> (+|-) TERM NUMEXPRESSION' | &
+    """
     node, i = parse_term(tokens, i, tabela_simbolos, escopo)
     while i < len(tokens) and tokens[i].tipo in ("+", "-"):
         op = tokens[i].tipo
         i += 1
         right, i = parse_term(tokens, i, tabela_simbolos, escopo)
-        node = combinar_binario(op, node, right, tokens[i-1])
+        node = combinar_binario(op, node, right, tokens[i - 1])
     return node, i
 
 
 def parse_term(tokens, i, tabela_simbolos, escopo):
+    """
+    TERM -> UNARYEXPR TERM'
+    TERM' -> (*|/|%) UNARYEXPR TERM' | &
+    """
     node, i = parse_unaryexpr(tokens, i, tabela_simbolos, escopo)
     while i < len(tokens) and tokens[i].tipo in ("*", "/", "%"):
         op = tokens[i].tipo
         i += 1
         right, i = parse_unaryexpr(tokens, i, tabela_simbolos, escopo)
-        node = combinar_binario(op, node, right, tokens[i-1])
+        node = combinar_binario(op, node, right, tokens[i - 1])
     return node, i
 
 
 def parse_unaryexpr(tokens, i, tabela_simbolos, escopo):
-    # OPERADORES -> + | - | &
+    """
+    UNARYEXPR -> (+|-) FACTOR | FACTOR
+    """
     if tokens[i].tipo in ("+", "-"):
         op = tokens[i].tipo
         i += 1
@@ -445,9 +587,17 @@ def parse_unaryexpr(tokens, i, tabela_simbolos, escopo):
 
 
 def parse_factor(tokens, i, tabela_simbolos, escopo):
+    """
+    FACTOR -> const_inteiro
+            | const_float
+            | const_string
+            | null
+            | ( NUMEXPRESSION )
+            | ident CHAMADA/uso-var
+    """
     tok = tokens[i]
 
-    # literais
+    # ---------------- literais ----------------
     if tok.tipo == "const_inteiro":
         node = ExprNode("int", None, None, valor=tok.valor)
         node.tipo = "int"
@@ -468,19 +618,26 @@ def parse_factor(tokens, i, tabela_simbolos, escopo):
         node.tipo = None   # ou um tipo especial
         return node, i + 1
 
-    # ( NUMEXPRESSION )
+    # ---------------- ( NUMEXPRESSION ) ----------------
     if tok.tipo == "(":
-        node, j = parse_numexpression(tokens, i+1, tabela_simbolos, escopo)
+        node, j = parse_numexpression(tokens, i + 1, tabela_simbolos, escopo)
         if tokens[j].tipo != ")":
             raise SemanticError(
                 f"Parêntese ')' esperado na linha {tokens[j].l}, coluna {tokens[j].c}"
             )
-        return node, j+1
+        return node, j + 1
 
-    # ident CHAMADA / LVALUE
+    # ---------------- ident CHAMADA / LVALUE ----------------
     if tok.tipo == "ident":
         idx_ts = tok.valor
         nome = tabela_simbolos[idx_ts][0]
+
+        if escopo is None:
+            raise SemanticError(
+                f"Escopo indefinido ao usar identificador '{nome}' "
+                f"(linha {tok.l}, coluna {tok.c})"
+            )
+
         simbolo = escopo.procura(nome)
         if simbolo is None:
             raise SemanticError(
@@ -488,66 +645,120 @@ def parse_factor(tokens, i, tabela_simbolos, escopo):
                 f"(linha {tok.l}, coluna {tok.c})"
             )
 
+        i += 1  # consumimos o ident
+
+        # --------- chamada de função: ident( ... ) ---------
+        if i < len(tokens) and tokens[i].tipo == "(":
+            if simbolo.categoria != "func":
+                raise SemanticError(
+                    f"Identificador '{nome}' usado como função, mas não é função "
+                    f"(linha {tok.l}, coluna {tok.c})"
+                )
+
+            i += 1  # pula '('
+            args_nodes = []
+
+            # lista de argumentos opcional
+            if i < len(tokens) and tokens[i].tipo != ")":
+                while True:
+                    # aqui permitimos EXPRESSIONS como argumentos
+                    arg_node, i = parse_expression(tokens, i, tabela_simbolos, escopo)
+                    args_nodes.append(arg_node)
+
+                    if i < len(tokens) and tokens[i].tipo == ",":
+                        i += 1  # pula ','
+                        continue
+                    break
+
+            if i >= len(tokens) or tokens[i].tipo != ")":
+                tok_err = tokens[i - 1] if i < len(tokens) else tok
+                raise SemanticError(
+                    f"')' esperado ao final da chamada de função '{nome}' "
+                    f"(linha {tok_err.l}, coluna {tok_err.c})"
+                )
+            i += 1  # consome ')'
+
+            # nó de chamada de função
+            node = ExprNode("call", None, None, valor=nome)
+            node.args = args_nodes      # lista de subárvores dos argumentos
+            node.tipo = None            # nossas funções são "procedures" (sem tipo de retorno)
+            return node, i
+
+        # --------- caso contrário: uso de variável normal ---------
         node = ExprNode("id", None, None, valor=nome)
         node.tipo = simbolo.tipo
-        i = i + 1
-
-        # CHAMADA (função) e índices [ ] podem ser tratados aqui depois
         return node, i
 
+    # ---------------- erro ----------------
     raise SemanticError(
         f"Token inesperado em fator: {tok.tipo} (linha {tok.l}, coluna {tok.c})"
     )
 
 
 def combinar_binario(op, left, right, tok):
+    """
+    Combina dois nós de expressão (left e right) com um operador binário op.
+
+    Verifica se os tipos de left e right são compatíveis (iguais) e,
+    em caso de incompatibilidade, lança um SemanticError.
+    """
     if left.tipo != right.tipo:
         raise SemanticError(
-            f"Operação '{op}' com tipos incompatíveis: {left.tipo} e {right.tipo} (linha {tok.l}, coluna {tok.c})"
+            f"Operação '{op}' com tipos incompatíveis: {left.tipo} e {right.tipo} "
+            f"(linha {tok.l}, coluna {tok.c})"
         )
     node = ExprNode(op, left, right, valor=op)
     node.tipo = left.tipo
     return node
 
 
+# ----------------------------------------------------------------------
+# 2ª passada: análise de expressões e atribuições
+# ----------------------------------------------------------------------
+
 def processar_expressoes(tokens, tabela_simbolos,
                          escopo_global, tipos_por_indice,
                          escopo_por_token):
-
-
     """
     Percorre a lista de tokens e:
+
       - constrói árvores de expressão para:
           * atribuições: LVALUE = EXPRESSION ;
-          * print EXPRESSION ;
-          * if( EXPRESSION ) ...
-          * for( ATRIBSTAT ; EXPRESSION ; ATRIBSTAT ) ...
-      - faz verificação de tipos dentro das expressões (via parse_expression / combinar_binario)
-      - opcionalmente imprime as árvores em pré-ordem.
+          * comandos print: print EXPRESSION ;
+          * condições de if: if( EXPRESSION ) ...
+          * condição do for: for( ATRIBSTAT ; EXPRESSION ; ATRIBSTAT ) ...
+
+      - faz verificação de tipos dentro das expressões (via parse_expression /
+        combinar_binario)
+
+      - imprime as árvores em pré-ordem para depuração.
     """
     pilha_escopos = [escopo_global]
-    pilha_loops = []  # pilha de loops para validar 'break'
-    
+    pilha_loops = []  # mantido para futura extensão (não é usado aqui)
+
     i = 0
     n = len(tokens)
 
     while i < n:
         tok = tokens[i]
 
-        # escopo correto para este ponto do código
+        # Escopo correto para este ponto do código
         escopo_corrente = escopo_por_token[i] or escopo_global
-        
+
+        # ---------------------------------------------------------
         # 1) ATRIBUIÇÃO: LVALUE = EXPRESSION ;
+        # ---------------------------------------------------------
         if tok.tipo == "ident":
             j = i + 1
 
-            # pula possíveis [ NUMEXPRESSION ] do LVALUE
+            # pula possíveis [ NUMEXPRESSION ] do LVALUE (acesso a vetores)
             while j < n and tokens[j].tipo == "[":
                 j += 1
                 while j < n and tokens[j].tipo != "]":
                     j += 1
                 j += 1  # pula ']'
 
+            # verifica se é mesmo uma atribuição
             if j < n and tokens[j].tipo == "=":
                 idx_ts = tok.valor
                 nome = tabela_simbolos[idx_ts][0]
@@ -558,17 +769,19 @@ def processar_expressoes(tokens, tabela_simbolos,
                         f"(linha {tok.l}, coluna {tok.c})"
                     )
 
+                # procura o ';' que encerra a atribuição
                 k = j + 1
                 while k < n and tokens[k].tipo != ";":
                     k += 1
                 if k >= n:
                     raise SemanticError("';' esperado ao final de atribuição")
 
-                expr_tokens = tokens[j+1:k]
+                expr_tokens = tokens[j + 1:k]
 
                 if expr_tokens:
                     node, _ = parse_expression(expr_tokens, 0, tabela_simbolos, escopo_corrente)
 
+                    # Verificação de tipos: tipo da expressão vs tipo da variável
                     if node.tipo is not None and simbolo.tipo is not None and node.tipo != simbolo.tipo:
                         raise SemanticError(
                             f"Tipo da expressão ({node.tipo}) incompatível com variável '{nome}' "
@@ -582,7 +795,9 @@ def processar_expressoes(tokens, tabela_simbolos,
                 i = k + 1
                 continue
 
+        # ---------------------------------------------------------
         # 2) PRINT: print EXPRESSION ;
+        # ---------------------------------------------------------
         if tok.tipo == "print":
             start_expr = i + 1
             j = start_expr
@@ -604,7 +819,9 @@ def processar_expressoes(tokens, tabela_simbolos,
             i = j + 1
             continue
 
+        # ---------------------------------------------------------
         # 3) IF: if ( EXPRESSION ) STATEMENT ...
+        # ---------------------------------------------------------
         if tok.tipo == "if":
             j = i + 1
             while j < n and tokens[j].tipo != "(":
@@ -642,7 +859,10 @@ def processar_expressoes(tokens, tabela_simbolos,
             i += 1
             continue
 
+        # ---------------------------------------------------------
         # 4) FOR: for( ATRIBSTAT ; EXPRESSION ; ATRIBSTAT ) STATEMENT
+        #    Aqui só nos interessa a expressão-condição (do meio).
+        # ---------------------------------------------------------
         if tok.tipo == "for":
             j = i + 1
             while j < n and tokens[j].tipo != "(":
@@ -652,6 +872,7 @@ def processar_expressoes(tokens, tabela_simbolos,
                     f"'(' esperado após 'for' (linha {tok.l}, coluna {tok.c})"
                 )
 
+            # primeiro ';' (final da 1ª parte do cabeçalho)
             k = j + 1
             while k < n and tokens[k].tipo != ";":
                 k += 1
@@ -660,9 +881,9 @@ def processar_expressoes(tokens, tabela_simbolos,
                     f"Primeiro ';' esperado no cabeçalho do for "
                     f"(linha {tok.l}, coluna {tok.c})"
                 )
-
             first_semicolon = k
 
+            # segundo ';' (final da condição)
             start_expr = first_semicolon + 1
             k = start_expr
             while k < n and tokens[k].tipo != ";":
@@ -672,7 +893,6 @@ def processar_expressoes(tokens, tabela_simbolos,
                     f"Segundo ';' esperado no cabeçalho do for "
                     f"(linha {tok.l}, coluna {tok.c})"
                 )
-
             second_semicolon = k
             end_expr = second_semicolon
 
@@ -688,5 +908,3 @@ def processar_expressoes(tokens, tabela_simbolos,
             continue
 
         i += 1
-        
-
